@@ -1,0 +1,165 @@
+# Camera class
+
+import RT_utility as rtu
+import RT_ray as rtr
+
+import numpy as np
+import math
+from PIL import Image as im
+
+class Camera:
+    def __init__(self) -> None:
+        self.img_spectrum = 3
+        self.aspect_ratio = 16.0/9.0
+        self.img_width = 400
+        self.center = rtu.Vec3()
+        self.intensity = rtu.Interval(0.000, 0.999)
+        self.samples_per_pixel = 10
+        self.vertical_fov = 90
+        self.look_from = rtu.Vec3(0, 0, -1)
+        self.look_at = rtu.Vec3(0, 0, 0)
+        self.vec_up = rtu.Vec3(0, 1, 0)
+
+        self.Lens = None
+
+        self.one_over_sqrt_spp = 1.0/math.sqrt(self.samples_per_pixel)
+
+        self.defocus_disk_u = rtu.Vec3()
+        self.defocus_disk_v = rtu.Vec3()
+
+        self.init_camera()
+        pass
+
+    def compute_img_height(self):
+        h = int(self.img_width / self.aspect_ratio)
+        return  h if h > 1 else 1
+    
+    def init_camera(self, aperture=0.0, focus_dist=10.0):
+        self.set_Lens(aperture, focus_dist)
+
+        self.img_height = self.compute_img_height()
+        self.center = self.look_from
+
+        h = math.tan(math.radians(self.vertical_fov)/2.0)
+        self.viewport_height = 2.0 * h * self.Lens.get_focus_dist()
+        self.viewport_width = self.viewport_height * float(self.img_width/self.img_height)
+
+        self.camera_frame_w = rtu.Vec3.unit_vector(self.look_from - self.look_at)
+        self.camera_frame_u = rtu.Vec3.unit_vector(
+            rtu.Vec3.cross_product(self.vec_up, self.camera_frame_w)
+        )
+        self.camera_frame_v = rtu.Vec3.cross_product(self.camera_frame_w, self.camera_frame_u)
+
+        self.viewport_u = self.camera_frame_u * self.viewport_width
+        self.viewport_v = -self.camera_frame_v * self.viewport_height
+        self.pixel_du = self.viewport_u / self.img_width
+        self.pixel_dv = self.viewport_v / self.img_height
+
+        self.viewport_upper_left = (
+            self.center
+            - self.camera_frame_w * self.Lens.get_focus_dist()
+            - self.viewport_u / 2
+            - self.viewport_v / 2
+        )
+
+        self.pixel00_location = self.viewport_upper_left + (self.pixel_du + self.pixel_dv) * 0.5
+        self.film = np.zeros((self.img_height, self.img_width, self.img_spectrum))
+
+        # ✅ aperture-based DoF
+        aperture_radius = self.Lens.get_aperture_radius()
+        self.defocus_disk_u = self.camera_frame_u * aperture_radius
+        self.defocus_disk_v = self.camera_frame_v * aperture_radius
+
+
+    # call right before init_camera()
+    def set_Lens(self, aperture, focus_dist):
+        self.Lens = Thinlens(aperture, focus_dist)
+
+    def write_to_film(self, widthId, heightId, cPixelColor):
+        # scaling with samples_per_pixel
+        scale = 1.0/self.samples_per_pixel
+    
+        r = cPixelColor.r()*scale
+        g = cPixelColor.g()*scale
+        b = cPixelColor.b()*scale
+
+        r = rtu.linear_to_gamma(r, 2.0)
+        g = rtu.linear_to_gamma(g, 2.0)
+        b = rtu.linear_to_gamma(b, 2.0)
+
+        self.film[heightId,widthId,0] = self.intensity.clamp(r)
+        self.film[heightId,widthId,1] = self.intensity.clamp(g)
+        self.film[heightId,widthId,2] = self.intensity.clamp(b)
+
+
+    def get_center_ray(self, i, j):
+        pixel_center = self.pixel00_location + (self.pixel_du*i) + (self.pixel_dv*j)
+        ray_direction = pixel_center - self.center
+        return rtr.Ray(self.center, ray_direction)
+
+    def get_ray(self, i, j):
+        pixel_center = self.pixel00_location + (self.pixel_du*i) + (self.pixel_dv*j)
+        pixel_sample = pixel_center + self.random_pixel_in_square(
+            self.pixel_du, self.pixel_dv
+        )
+
+        ray_origin = self.center
+
+        # aperture-based DoF
+        if self.Lens.get_aperture_radius() > 1e-6:
+            ray_origin = self.defocus_disk_sample()
+
+        ray_direction = pixel_sample - ray_origin
+        ray_time = rtu.random_double()   # รองรับ motion blur
+
+        return rtr.Ray(ray_origin, ray_direction, ray_time)
+    
+    def get_jittered_ray(self, i, j, s_i, s_j):
+        pixel_center = self.pixel00_location + (self.pixel_du*i) + (self.pixel_dv*j)
+        pixel_sample = pixel_center + self.pixel_sample_square(
+            self.pixel_du, self.pixel_dv, s_i, s_j
+        )
+
+        ray_origin = self.center
+
+        if self.Lens.get_aperture_radius() > 1e-6:
+            ray_origin = self.defocus_disk_sample()
+
+        ray_direction = pixel_sample - ray_origin
+        ray_time = rtu.random_double()
+
+        return rtr.Ray(ray_origin, ray_direction, ray_time)
+
+    def random_pixel_in_square(self, vDu, vDv):
+        px = -0.5 + rtu.random_double()
+        py = -0.5 + rtu.random_double()
+        return (vDu*px) + (vDv*py)
+
+    def pixel_sample_square(self, vDu, vDv, s_i, s_j):
+        px = -0.5 + self.one_over_sqrt_spp * (s_i + rtu.random_double())
+        py = -0.5 + self.one_over_sqrt_spp * (s_j + rtu.random_double())
+        return (vDu * px) + (vDv * py)
+
+    # an additional defocus method --> To move the ray orgin away from its center by defecous parameters.
+    def defocus_disk_sample(self):
+        pp = rtu.Vec3.random_vec3_in_unit_disk()
+        du = (self.defocus_disk_u * pp.x())
+        dv = (self.defocus_disk_v * pp.y())
+        return self.center + du + dv
+
+
+class Lens():
+    def __init__(self) -> None:
+        pass
+
+class Thinlens(Lens):
+    def __init__(self, aperture=0.0, focus_dist=10.0):
+        self.aperture = aperture
+        self.focus_distance = focus_dist
+
+    def get_focus_dist(self):
+        return self.focus_distance
+
+    def get_aperture_radius(self):
+        return self.aperture * 0.5
+    
