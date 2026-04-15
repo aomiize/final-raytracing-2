@@ -44,8 +44,8 @@ def main():
     # ========================================
     # SETTINGS
     # ========================================
-    camera.img_width = 960
-    camera.samples_per_pixel = 64    # Jittered sampling
+    camera.img_width = 1920
+    camera.samples_per_pixel = 1024    # Jittered sampling
     camera.max_depth = 5
     # ========================================
     
