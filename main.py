@@ -140,16 +140,16 @@ def main():
             scene.add_object(rto.Sphere(rtu.Vec3(px + dx, py + dy, -49.2), 0.1, frame_mat))
     
     # ========================================
-    # CHANDELIER (โคมไฟ)
+    # CHANDELIER (โคมไฟ - ลดความสว่าง)
     # ========================================
     
-    chandelier_mat = rtl.TemperatureLight(2700, 3.0)
+    chandelier_mat = rtl.TemperatureLight(2700, 1.5)  # ลดจาก 3.0 → 1.5
     
     for i in range(8):
         angle = (i / 8.0) * 2 * math.pi
         x = 0.8 * math.cos(angle)
         z = -25 + 0.8 * math.sin(angle)
-        scene.add_object(rto.Sphere(rtu.Vec3(x, 6.5, z), 0.15, chandelier_mat))
+        scene.add_object(rto.Sphere(rtu.Vec3(x, 6.5, z), 0.12, chandelier_mat))  # เล็กลง 0.15→0.12
     
     # ========================================
     # BENCHES (ม้านั่ง - จะเบลอเพราะอยู่ใกล้)
@@ -161,25 +161,44 @@ def main():
         scene.add_object(rto.Sphere(rtu.Vec3(x, 0.5, -35), 0.4, bench_mat))
     
     # ========================================
-    # LIGHTS
+    # LIGHTS - แบบภาพอ้างอิง
     # ========================================
     
-    # Spotlights บนภาพ
+    # 💡 Spotlights หลัก 3 ดวง บนภาพ (สว่างชัดเจน)
     for x in [-10, 0, 10]:
         scene.add_object(rto.Sphere(
-            rtu.Vec3(x, 6, -48),
-            0.15,
-            rtl.Diffuse_light(rtu.Color(2.0, 2.0, 2.2))
+            rtu.Vec3(x, 6.8, -47),       # ขยับไปข้างหน้าเล็กน้อย
+            0.25,                         # ใหญ่ขึ้นเล็กน้อย
+            rtl.TemperatureLight(3200, 8.0)  # อุ่น + สว่างมาก
         ))
     
-    # Ambient lights
-    for x in [-15, 0, 15]:
-        for z in [-40, -20]:
-            scene.add_object(rto.Sphere(
-                rtu.Vec3(x, 7.5, z),
-                0.2,
-                rtl.TemperatureLight(2800, 0.4)
-            ))
+    # 🌟 Ambient ceiling lights (นุ่มนวล, กระจายทั่วห้อง)
+    ambient_positions = [
+        # แถวหน้า
+        (-15, 7.0, -15),
+        (0, 7.0, -15),
+        (15, 7.0, -15),
+        # แถวกลาง
+        (-15, 7.0, -30),
+        (15, 7.0, -30),
+        # แถวหลัง (ข้างๆ ภาพ)
+        (-20, 7.0, -45),
+        (20, 7.0, -45),
+    ]
+    
+    for x, y, z in ambient_positions:
+        scene.add_object(rto.Sphere(
+            rtu.Vec3(x, y, z),
+            0.15,
+            rtl.TemperatureLight(3000, 0.6)  # อุ่น + ไม่สว่างมาก
+        ))
+    
+    # 🔆 Fill light เบาๆ (เติมแสงในส่วนที่มืด)
+    scene.add_object(rto.Sphere(
+        rtu.Vec3(0, 6.5, -20),
+        0.3,
+        rtl.TemperatureLight(2800, 1.2)  # อุ่นมาก + ไม่สว่างมาก
+    ))
     
     # ========================================
     # RENDER
@@ -188,16 +207,21 @@ def main():
     integrator = rti.Integrator(bDlight=True, bSkyBG=False)
     renderer = rtren.Renderer(camera, integrator, scene)
     
-    safe_print("🎨 Rendering Scene 1 - DEPTH OF FIELD")
+    safe_print("🎨 Rendering Scene 1 - DEPTH OF FIELD + REALISTIC LIGHTING")
     safe_print(f"Resolution:   {camera.img_width} × {camera.img_height}")
     safe_print(f"Samples:      {camera.samples_per_pixel} SPP (Jittered)")
     safe_print(f"Max Depth:    {camera.max_depth}")
     safe_print("")
-    safe_print("Effect:")
+    safe_print("Lighting Setup (like reference image):")
+    safe_print("  💡 3× Spotlights (3200K, bright) - directly above paintings")
+    safe_print("  🌟 7× Ambient lights (3000K, soft) - ceiling spread")
+    safe_print("  🔆 1× Fill light (2800K, warm) - center")
+    safe_print("  💫 8× Chandelier (2700K, dim) - decorative")
+    safe_print("")
+    safe_print("Depth of Field:")
     safe_print("  ✓ Center painting (Mona Lisa) - SHARP")
     safe_print("  ✓ Side paintings - BLURRED")
     safe_print("  ✓ Benches (foreground) - BLURRED")
-    safe_print("  ✓ Ceiling lights (background) - BLURRED")
     safe_print("")
     safe_print("Expected: 2-3 minutes")
     safe_print("=" * 70)
