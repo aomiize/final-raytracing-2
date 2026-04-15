@@ -1,3 +1,16 @@
+"""
+Scene 1: DEPTH OF FIELD - ชัดตรงกลาง เบลอข้างๆ
+==============================================
+ใช้ Aperture ใหญ่ + Focus ที่ภาพกลาง
+→ ภาพกลาง (Mona Lisa) ชัด
+→ ภาพข้างๆ เบลอ
+→ ม้านั่งข้างหน้าเบลอ
+
+⚡ Settings: 960×540, 64 SPP, 2-3 นาที
+"""
+
+import sys
+import io
 import RT_utility as rtu
 import RT_camera as rtc
 import RT_renderer as rtren
@@ -7,139 +20,206 @@ import RT_object as rto
 import RT_integrator as rti
 import RT_texture as rtt
 import RT_light as rtl
+import math
+
+if sys.platform == 'win32':
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except:
+        pass
 
 
-def renderJapanScene():
+def safe_print(msg):
+    try:
+        print(msg)
+    except:
+        pass
 
-    main_camera = rtc.Camera()
 
-    # ---------- render quality ----------
-    main_camera.aspect_ratio = 16.0/9.0
-    main_camera.img_width = 1920
-    main_camera.samples_per_pixel = 128
-    main_camera.max_depth = 8
-
-    main_camera.vertical_fov = 35
-
-    main_camera.look_from = rtu.Vec3(0,2,7)
-    main_camera.look_at = rtu.Vec3(0,1,0)
-    main_camera.vec_up = rtu.Vec3(0,1,0)
-
-    aperture = 0.1
-    focus_distance = 7
-
-    main_camera.init_camera(aperture, focus_distance)
-
-    world = rts.Scene()
-
-    # ---------- ground ----------
-
-    checker = rtt.CheckerTexture(
-        0.5,
-        rtu.Color(0.15,0.15,0.15),
-        rtu.Color(0.7,0.7,0.7)
-    )
-
-    ground_mat = rtm.TextureColor(checker)
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(0,-1000,0),
-            1000,
-            ground_mat
-        )
-    )
-
-    # ---------- Mt Fuji background ----------
-
-    fuji_tex = rtt.ImageTexture("textures/fuji.jpg")
-    fuji_mat = rtm.TextureColor(fuji_tex)
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(0,6,-20),
-            7,
-            fuji_mat
-        )
-    )
-
-    # ---------- convenience store ----------
-
-    store_tex = rtt.ImageTexture("textures/store.jpg")
-    store_mat = rtm.TextureColor(store_tex)
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(0,1,-3),
-            1.6,
-            store_mat
-        )
-    )
-
-    # ---------- neon sign ----------
-
-    neon_light = rtl.Diffuse_light(
-        rtu.Color(12,4,3)
-    )
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(0,2.2,-3),
-            0.35,
-            neon_light
-        )
-    )
-
-    # ---------- window light ----------
-
-    window_light = rtl.Diffuse_light(
-        rtu.Color(6,6,4)
-    )
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(-0.6,1.2,-2.6),
-            0.25,
-            window_light
-        )
-    )
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(0.6,1.2,-2.6),
-            0.25,
-            window_light
-        )
-    )
-
-    # ---------- street light ----------
-
-    street_light = rtl.Diffuse_light(
-        rtu.Color(8,7,5)
-    )
-
-    world.add_object(
-        rto.Sphere(
-            rtu.Vec3(-2,3,-2),
-            0.6,
-            street_light
-        )
-    )
-
-    # ---------- integrator ----------
-
-    integrator = rti.Integrator(bSkyBG=False)
-
-    renderer = rtren.Renderer(
-        main_camera,
-        integrator,
-        world
-    )
-
+def main():
+    
+    camera = rtc.Camera()
+    camera.aspect_ratio = 16.0 / 9.0
+    
+    # ========================================
+    # SETTINGS
+    # ========================================
+    camera.img_width = 960
+    camera.samples_per_pixel = 64    # Jittered sampling
+    camera.max_depth = 5
+    # ========================================
+    
+    # ========================================
+    # CAMERA - DEPTH OF FIELD
+    # ========================================
+    camera.vertical_fov = 50
+    camera.look_from = rtu.Vec3(0, 1.8, -10)
+    camera.look_at = rtu.Vec3(0, 2.5, -30)     # มองไปที่ภาพกลาง
+    camera.vec_up = rtu.Vec3(0, 1, 0)
+    
+    # ⭐ KEY: Aperture ใหญ่ = DOF ตื้น (เบลอมาก)
+    aperture = 0.3              # ← ใหญ่มาก (0.3) = เบลอมาก
+                                # ลด 0.1 = เบลอน้อยลง
+                                
+    # ⭐ Focus ที่ภาพกลาง (ระยะห่างจากกล้องถึงภาพ)
+    focus_distance = 39.5       # ← ระยะจาก camera ถึงภาพกลาง
+                                # ภาพอยู่ที่ z=-49.5, camera อยู่ที่ z=-10
+                                # ระยะ = 49.5 - 10 = 39.5
+    
+    camera.init_camera(aperture, focus_distance)
+    
+    safe_print("=" * 70)
+    safe_print("📷 DEPTH OF FIELD SETTINGS")
+    safe_print("=" * 70)
+    safe_print(f"Aperture:        {aperture} (large = more blur)")
+    safe_print(f"Focus Distance:  {focus_distance} (distance to center painting)")
+    safe_print(f"Result:          Center painting SHARP, others BLURRED")
+    safe_print("=" * 70)
+    safe_print("")
+    
+    # ========================================
+    # SCENE
+    # ========================================
+    
+    scene = rts.Scene(rtu.Color(0.02, 0.02, 0.03))
+    
+    # Materials
+    floor_mat = rtm.Lambertian(rtu.Color(0.15, 0.15, 0.17))
+    wall_mat = rtm.Lambertian(rtu.Color(0.15, 0.15, 0.16))
+    ceiling_mat = rtm.Lambertian(rtu.Color(0.08, 0.08, 0.09))
+    
+    # Room
+    scene.add_object(rto.Quad(rtu.Vec3(-30, 0, -50), rtu.Vec3(60, 0, 0), rtu.Vec3(0, 0, 100), floor_mat))
+    scene.add_object(rto.Quad(rtu.Vec3(-30, 0, -50), rtu.Vec3(60, 0, 0), rtu.Vec3(0, 8, 0), wall_mat))
+    scene.add_object(rto.Quad(rtu.Vec3(-30, 0, -50), rtu.Vec3(0, 0, 100), rtu.Vec3(0, 8, 0), wall_mat))
+    scene.add_object(rto.Quad(rtu.Vec3(30, 0, -50), rtu.Vec3(0, 0, 100), rtu.Vec3(0, 8, 0), wall_mat))
+    scene.add_object(rto.Quad(rtu.Vec3(-30, 8, -50), rtu.Vec3(60, 0, 0), rtu.Vec3(0, 0, 100), ceiling_mat))
+    
+    # ========================================
+    # PAINTINGS (ตำแหน่งเดียวกันทุกภาพ z=-49.5)
+    # ========================================
+    
+    # ภาพซ้าย (จะเบลอ)
+    girl_texture = rtt.ImageTexture('textures/1665_Girl_with_a_Pearl_Earring.jpg')
+    girl_mat = rtm.TextureColor(girl_texture)
+    scene.add_object(rto.Quad(
+        rtu.Vec3(-10 - 1.0, 2.8 - 1.2, -49.5),
+        rtu.Vec3(2.0, 0, 0),
+        rtu.Vec3(0, 2.4, 0),
+        girl_mat
+    ))
+    
+    # ภาพกลาง (จะชัด ⭐)
+    mona_texture = rtt.ImageTexture('textures/Mona_Lisa.jpg')
+    mona_mat = rtm.TextureColor(mona_texture)
+    scene.add_object(rto.Quad(
+        rtu.Vec3(0 - 0.9, 3.0 - 1.35, -49.5),
+        rtu.Vec3(1.8, 0, 0),
+        rtu.Vec3(0, 2.7, 0),
+        mona_mat
+    ))
+    
+    # ภาพขวา (จะเบลอ)
+    portrait_texture = rtt.ImageTexture('textures/Self-portrait-with-Straw-Hat.jpg')
+    portrait_mat = rtm.TextureColor(portrait_texture)
+    scene.add_object(rto.Quad(
+        rtu.Vec3(10 - 1.0, 2.8 - 1.2, -49.5),
+        rtu.Vec3(2.0, 0, 0),
+        rtu.Vec3(0, 2.4, 0),
+        portrait_mat
+    ))
+    
+    # ========================================
+    # FRAMES (กรอบทอง)
+    # ========================================
+    
+    frame_mat = rtm.Metal(rtu.Color(1.0, 0.84, 0.0), 0.2)
+    
+    for px, py, pw, ph in [(-10, 2.8, 2.0, 2.4), (0, 3.0, 1.8, 2.7), (10, 2.8, 2.0, 2.4)]:
+        for dx, dy in [(-pw/2, ph/2), (pw/2, ph/2), (-pw/2, -ph/2), (pw/2, -ph/2)]:
+            scene.add_object(rto.Sphere(rtu.Vec3(px + dx, py + dy, -49.2), 0.1, frame_mat))
+    
+    # ========================================
+    # CHANDELIER (โคมไฟ)
+    # ========================================
+    
+    chandelier_mat = rtl.TemperatureLight(2700, 3.0)
+    
+    for i in range(8):
+        angle = (i / 8.0) * 2 * math.pi
+        x = 0.8 * math.cos(angle)
+        z = -25 + 0.8 * math.sin(angle)
+        scene.add_object(rto.Sphere(rtu.Vec3(x, 6.5, z), 0.15, chandelier_mat))
+    
+    # ========================================
+    # BENCHES (ม้านั่ง - จะเบลอเพราะอยู่ใกล้)
+    # ========================================
+    
+    bench_mat = rtm.Lambertian(rtu.Color(0.4, 0.1, 0.1))
+    
+    for x in [-10, 0, 10]:
+        scene.add_object(rto.Sphere(rtu.Vec3(x, 0.5, -35), 0.4, bench_mat))
+    
+    # ========================================
+    # LIGHTS
+    # ========================================
+    
+    # Spotlights บนภาพ
+    for x in [-10, 0, 10]:
+        scene.add_object(rto.Sphere(
+            rtu.Vec3(x, 6, -48),
+            0.15,
+            rtl.Diffuse_light(rtu.Color(2.0, 2.0, 2.2))
+        ))
+    
+    # Ambient lights
+    for x in [-15, 0, 15]:
+        for z in [-40, -20]:
+            scene.add_object(rto.Sphere(
+                rtu.Vec3(x, 7.5, z),
+                0.2,
+                rtl.TemperatureLight(2800, 0.4)
+            ))
+    
+    # ========================================
+    # RENDER
+    # ========================================
+    
+    integrator = rti.Integrator(bDlight=True, bSkyBG=False)
+    renderer = rtren.Renderer(camera, integrator, scene)
+    
+    safe_print("🎨 Rendering Scene 1 - DEPTH OF FIELD")
+    safe_print(f"Resolution:   {camera.img_width} × {camera.img_height}")
+    safe_print(f"Samples:      {camera.samples_per_pixel} SPP (Jittered)")
+    safe_print(f"Max Depth:    {camera.max_depth}")
+    safe_print("")
+    safe_print("Effect:")
+    safe_print("  ✓ Center painting (Mona Lisa) - SHARP")
+    safe_print("  ✓ Side paintings - BLURRED")
+    safe_print("  ✓ Benches (foreground) - BLURRED")
+    safe_print("  ✓ Ceiling lights (background) - BLURRED")
+    safe_print("")
+    safe_print("Expected: 2-3 minutes")
+    safe_print("=" * 70)
+    safe_print("")
+    
+    # ใช้ jittered sampling
     renderer.render_jittered()
+    
+    renderer.write_img2png('scene1_depth_of_field.png')
+    
+    safe_print("")
+    safe_print("=" * 70)
+    safe_print("✅ Done!")
+    safe_print("=" * 70)
+    safe_print("Output: scene1_depth_of_field.png")
+    safe_print("")
+    safe_print("📷 Depth of Field Effect:")
+    safe_print("  • Aperture 0.3 = Large aperture = Shallow DOF")
+    safe_print("  • Focus at center painting (z=-49.5)")
+    safe_print("  • Objects at different depths appear blurred")
+    safe_print("=" * 70)
 
-    renderer.write_img2png("japan_fuji_scene.png")
 
-
-if __name__ == "__main__":
-    renderJapanScene()
+if __name__ == '__main__':
+    main()
